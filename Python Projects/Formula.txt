@@ -1,2 +1,0 @@
-(A or B)
-(A or B or C)
