@@ -1,0 +1,170 @@
+package edu.yu.cs.com3800;
+
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.ByteBuffer;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Logger;
+
+import edu.yu.cs.com3800.Message.MessageType;
+import edu.yu.cs.com3800.ZooKeeperPeerServer.ServerState;
+
+public class ZooKeeperLeaderElection implements LoggingServer {
+	/**
+	 * time to wait once we believe we've reached the end of leader election.
+	 */
+	private final static int finalizeWait = 200;
+
+	/**
+	 * Upper bound on the amount of time between two consecutive notification
+	 * checks. This impacts the amount of time to get the system up again after long
+	 * partitions. Currently 60 seconds.
+	 */
+	private final static int maxNotificationInterval = 60000;
+
+	private final LinkedBlockingQueue<Message> incomingMessages;
+	private final ZooKeeperPeerServer myPeerServer;
+
+	private long proposedLeader;
+	private long proposedEpoch;
+	
+	private Logger logger;
+
+	public ZooKeeperLeaderElection(ZooKeeperPeerServer server, LinkedBlockingQueue<Message> incomingMessages) {
+		try {
+			this.logger= initializeLogging(this.getClass().getCanonicalName() + "-on-port-" + server.getUdpPort());
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		this.incomingMessages = incomingMessages;
+		this.myPeerServer = server;
+		this.proposedLeader= server.getServerId();
+	}
+
+	public synchronized Vote lookForLeader() {
+		this.logger.info("starting leader election");
+		Map<Long, ElectionNotification> votes= new HashMap<>();
+        sendNotifications();
+        while(this.myPeerServer.getPeerState() == ServerState.LOOKING) {
+            Message received = getNextMessage();
+        	ElectionNotification notification= getNotificationFromMessage(received);
+			boolean isUpdated= updateVote(notification, votes);
+			if(isUpdated && haveEnoughVotes(votes, notification)) {
+				ServerState state= notification.getState();
+				if(ServerState.LEADING.equals(state) || ServerState.FOLLOWING.equals(state) || !hasHigherVote(notification)) {
+					return acceptElectionWinner(notification);
+				}
+			}
+        }
+        return null;
+	}
+	
+	private boolean hasHigherVote(ElectionNotification vote) {
+		long proposedLeaderID = vote.getProposedLeaderID();
+		return this.incomingMessages.stream().map(ZooKeeperLeaderElection::getNotificationFromMessage).map(ElectionNotification::getProposedLeaderID)
+				.anyMatch(id -> (id > proposedLeaderID));
+	}
+
+	private boolean updateVote(ElectionNotification notification, Map<Long, ElectionNotification> votes) {
+		if(notification.getProposedLeaderID() < this.proposedLeader) {
+			return false;
+		}
+		votes.put(notification.getSenderID(), notification);
+		if(supersedesCurrentVote(notification.getProposedLeaderID(), notification.getPeerEpoch())) {
+			this.logger.info("higher vote received, updating vote: " + notification.getProposedLeaderID() + " > " + proposedLeader);
+			this.proposedLeader= notification.getProposedLeaderID();
+			this.proposedEpoch= notification.getPeerEpoch();
+			sendNotifications();
+		}
+		return true;
+	}
+
+	private Message getNextMessage() {
+		int waitTime= finalizeWait;
+		Message received= null;
+		while(received == null) {
+			try {
+				received= this.incomingMessages.poll(waitTime, TimeUnit.MILLISECONDS);
+			} catch (InterruptedException e) {
+				this.myPeerServer.shutdown();
+			}
+			sendNotifications();
+			if(waitTime < maxNotificationInterval) {
+				waitTime*= 2;
+			}
+		}
+		return received;
+	}
+
+	private void sendNotifications() {
+		ElectionNotification notification= new ElectionNotification(this.proposedLeader, this.myPeerServer.getPeerState(), this.myPeerServer.getServerId(), this.proposedEpoch);
+		this.myPeerServer.sendBroadcast(MessageType.ELECTION, buildMsgContent(notification));
+	}
+
+	private Vote acceptElectionWinner(ElectionNotification n) {
+		// set my state to either LEADING or FOLLOWING
+		if(this.myPeerServer.getServerId().equals(n.getProposedLeaderID())) {
+			this.myPeerServer.setPeerState(ServerState.LEADING);
+		} else {
+			this.myPeerServer.setPeerState(ServerState.FOLLOWING);
+		}
+		try {
+			this.myPeerServer.setCurrentLeader(n);
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
+		}
+		// clear out the incoming queue before returning
+		this.incomingMessages.clear();
+		this.sendNotifications();
+		return n;
+	}
+
+	/*
+	 * We return true if one of the following three cases hold: 1- New epoch is
+	 * higher 2- New epoch is the same as current epoch, but server id is higher.
+	 */
+	protected boolean supersedesCurrentVote(long newId, long newEpoch) {
+		return (newEpoch > this.proposedEpoch) || ((newEpoch == this.proposedEpoch) && (newId > this.proposedLeader));
+	}
+
+	/**
+	 * Termination predicate. Given a set of votes, determines if have sufficient
+	 * support for the proposal to declare the end of the election round. Who voted
+	 * for who isn't relevant, we only care that each server has one current vote
+	 */
+	protected boolean haveEnoughVotes(Map<Long, ElectionNotification> votes, Vote proposal) {
+		long proposedLeaderID = proposal.getProposedLeaderID();
+		long numOfVotes= votes.values().stream().map(ElectionNotification::getProposedLeaderID).filter((id) -> (id == proposedLeaderID)).count()+1;
+		int quorumSize= this.myPeerServer.getQuorumSize();
+		if(quorumSize <= numOfVotes) {
+			return true;
+		}
+		return false;
+	}
+
+	public static ElectionNotification getNotificationFromMessage(Message received) {
+		ByteBuffer buffer= ByteBuffer.wrap(received.getMessageContents());
+		long proposedID= buffer.getLong();
+		ServerState state = ServerState.getServerState(buffer.getChar());
+		long senderID= buffer.getLong();
+		long epoch= buffer.getLong();
+		ElectionNotification notification= new ElectionNotification(proposedID, state, senderID, epoch);
+		return notification;
+	}
+
+	public static byte[] buildMsgContent(ElectionNotification notification) {
+		long proposedID= notification.getProposedLeaderID();
+		char state = notification.getState().getChar();
+		long senderID= notification.getSenderID();
+		long epoch= notification.getPeerEpoch();
+		ByteBuffer buffer= ByteBuffer.allocate(26);
+		buffer.putLong(proposedID);
+		buffer.putChar(state);
+		buffer.putLong(senderID);
+		buffer.putLong(epoch);
+		return buffer.array();
+	}
+}
