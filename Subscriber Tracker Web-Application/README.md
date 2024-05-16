@@ -1,0 +1,1 @@
+Created a web-application to keep track of subscribers (supports CRUD operations). Used Node.js for the the backend, HTML for the frontend and MongoDB for the database.
