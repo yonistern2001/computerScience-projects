@@ -10,3 +10,7 @@ Command line functions
 * size- print size of file
 * cd- change current directory
 * read- print data from file using the offset and the number of bytes its told to read
+
+Demo:
+
+![image](https://github.com/yonistern2001/computerScience-projects/assets/98286222/b3986959-bae3-44d8-b45c-92a7b504fdbf)
