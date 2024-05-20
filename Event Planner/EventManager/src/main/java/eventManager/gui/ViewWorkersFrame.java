@@ -1,4 +1,4 @@
-package eventManager;
+package eventManager.gui;
 
 import java.awt.Color;
 import java.awt.Font;
@@ -17,6 +17,9 @@ import javax.swing.border.LineBorder;
 import javax.swing.border.TitledBorder;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
+
+import eventManager.EventsManager;
+import eventManager.Worker;
 
 public class ViewWorkersFrame extends JFrame
 {

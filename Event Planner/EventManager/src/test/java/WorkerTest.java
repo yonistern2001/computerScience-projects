@@ -1,10 +1,12 @@
-package eventManager;
+
 
 
 import static org.junit.Assert.assertEquals;
 
 import org.junit.Before;
 import org.junit.Test;
+
+import eventManager.Worker;
 public class WorkerTest 
 {
     private String name1,name2,name3,name4,email1,email2,email3,email4,number1,number2,number3,number4;

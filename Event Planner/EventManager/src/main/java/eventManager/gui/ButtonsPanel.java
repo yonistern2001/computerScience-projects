@@ -1,4 +1,4 @@
-package eventManager;
+package eventManager.gui;
 
 import java.awt.Color;
 import java.awt.Dimension;

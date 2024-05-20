@@ -1,4 +1,4 @@
-package eventManager;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 
@@ -6,6 +6,10 @@ import java.util.HashSet;
 
 import org.junit.Before;
 import org.junit.Test;
+
+import eventManager.Priority;
+import eventManager.Task;
+import eventManager.Worker;
 
 public class TaskTest
 {

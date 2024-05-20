@@ -1,4 +1,4 @@
-package eventManager;
+package eventManager.gui;
 
 import java.awt.Color;
 import java.awt.Font;
@@ -23,6 +23,12 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.border.EtchedBorder;
 import javax.swing.border.LineBorder;
 import javax.swing.border.TitledBorder;
+
+import eventManager.Event;
+import eventManager.EventsManager;
+import eventManager.Priority;
+import eventManager.Task;
+import eventManager.Worker;
 
 public class TaskFrame extends JFrame
 {

@@ -1,4 +1,4 @@
-package eventManager;
+package eventManager.gui;
 
 import java.awt.EventQueue;
 import java.awt.Font;
@@ -11,6 +11,9 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.SwingConstants;
 import javax.swing.border.EtchedBorder;
+
+import eventManager.Event;
+import eventManager.EventsManager;
 
 public class MainFrame extends JFrame
 {

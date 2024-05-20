@@ -1,4 +1,4 @@
-package eventManager;
+package eventManager.gui;
 
 import java.awt.Font;
 import java.awt.event.ActionEvent;
@@ -13,6 +13,9 @@ import javax.swing.JPanel;
 import javax.swing.JTextField;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.EtchedBorder;
+
+import eventManager.Event;
+import eventManager.EventsManager;
 
 public class EventCreatorFrame extends JFrame
 {
